@@ -1,0 +1,97 @@
+vars:
+  - params.yaml
+
+stages:
+  features:
+    foreach: ${features}
+    do:
+      cmd: ./src/features/${key}.py segmented
+      deps:
+        - ./data/segmented/wav
+      params:
+        - features.${key}
+      outs:
+        - ./data/features/${key}
+  transcriptions:
+    cmd: ./src/data-preparation/transcriptions.py
+    deps:
+      - ./data/wav
+      - ./src/data-preparation/transcriptions.py
+    outs:
+      - ./data/transcriptions
+    params:
+      - transcriptions
+  prepare:
+    cmd: ./src/data-preparation/prepare.py
+    deps:
+      - data/raw/audio
+      - src/data-preparation/prepare.py
+    outs:
+      - data/wav
+      - data/labels.csv
+      - log/prepare.log
+  folds:
+    cmd: python -m src.data-preparation.folds
+    deps:
+      - data/labels.csv
+      - ./data/diagnostics.csv
+    outs:
+      - data/folds.csv
+    params:
+      - folds
+  segment:
+    cmd: python src/data-preparation/segment.py --wav-dir data/wav --transcription-dir data/transcriptions --dest data/segmented
+    deps:
+      - ./data/wav
+      - ./data/transcriptions
+      - ./src/data-preparation/segment.py
+    outs:
+      - ./data/segmented
+  xbow:
+    cmd: python -m src.xbow
+    deps:
+      - data/features/${xbow.features}/features.csv
+      - data/folds.csv
+    outs:
+      - data/features/xbow
+    params:
+      - dataset
+      - xbow
+  ml_audio:
+    cmd: python -m src.ml.${train.audio.model}.audio
+    deps:
+      - ./data/features/${train.audio.features}
+      - ./data/diagnostics.csv
+    params:
+      - dataset
+      - train.experiment
+      - train.audio
+    outs:
+      - ./results/audio
+    metrics:
+      - ./metrics/audio/metrics.yaml
+  ml_fusion:
+    cmd: python -m src.ml.${train.fusion.model}.fusion
+    deps:
+      - ./data/features/${train.fusion.features}
+      - ./data/diagnostics.csv
+    params:
+      - dataset
+      - train.experiment
+      - train.fusion
+    outs:
+      - ./results/fusion
+    metrics:
+      - ./metrics/fusion/metrics.yaml
+  ml_metadata:
+    cmd: python -m src.ml.${train.metadata.model}.metadata
+    deps:
+      - ./data/folds.csv
+    params:
+      - dataset
+      - train.experiment
+      - train.metadata
+    outs:
+      - ./results/metadata
+    metrics:
+      - ./metrics/metadata/metrics.yaml

@@ -1,0 +1,55 @@
+# Parameters for the experiment should be defined here and the contents read by the respective scripts.
+features:
+  wav2vec:
+    extractors:
+      # - facebook/wav2vec2-large-xlsr-53
+      - audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim
+    # - jonatasgrosman/wav2vec2-large-xlsr-53-german
+xbow:
+  features: wav2vec/audeering_wav2vec2-large-robust-12-ft-emotion-msp-dim
+  cobebook_size: 2000
+  n_assigned: 50
+
+transcriptions:
+  diarize: true
+  language: de
+  min_speakers: 2
+  max_speakers: 2
+
+dataset:
+  group_regex: (?P<subjectID>\w+)/(?P<t>t\d)(_(?P<interviewType>personality))?(.*).wav
+  aggregate_re: (\w+/t\d(_personality)?).*.wav
+  groups:
+    t:
+    interviewType:
+      - hamilton
+folds:
+  cv: 10
+  stratify: MDD_aktuell
+  other_scales: true
+train:
+  audio:
+    model: scikit
+    estimator: svm
+    features: xbow
+  experiment:
+    target_label: MDD_aktuell
+    target_t: matching
+    leave_out: subjectID
+  classification:
+    discretisation:
+  fusion:
+    model: scikit
+    estimator: svm
+    features: xbow
+    metadata_columns:
+      - HRSD17_sum
+      - phq9_sum
+      - QIDSC_sum
+  metadata:
+    model: scikit
+    estimator: svm
+    metadata_columns:
+      - HRSD17_sum
+      - phq9_sum
+      - QIDSC_sum

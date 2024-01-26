@@ -1,0 +1,9 @@
+.direnv
+__pycache__
+.devenv
+.venv
+tokenizer/
+.tmp/
+.env.secret
+vocab.json
+slurm/

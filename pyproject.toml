@@ -1,0 +1,42 @@
+[tool.poetry]
+name = "devenv"
+version = "0.1.0"
+description = "Python+poetry shell via devenv"
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<4.0.0"
+dvc = {extras = ["ssh"], version = "^3.15.3"}
+librosa = "^0.10.1"
+pyreadstat = "^1.2.2"
+transformers = "^4.31.0"
+datasets = "^2.14.4"
+rich = "^13.5.2"
+tqdm = "^4.66.1"
+torch = "2.0.0"
+pandas = "^2.0.3"
+llvmlite = "^0.40.1"
+praat-parselmouth = "^0.4.3"
+pyctcdecode = "^0.5.0"
+torchaudio = "2.0.1"
+whisperx = {git = "https://github.com/mauricege/whisperx.git"}
+ffmpeg-python = "^0.2.0"
+python-dotenv = "^1.0.0"
+jupyter = "^1.0.0"
+torchvision = "<0.15.2"
+faster-whisper = "^0.10.0"
+pyannote-audio = "3.1.1"
+xgboost = "^2.0.2"
+range-key-dict = "^1.1.0"
+cacheout = "^0.16.0"
+catboost = "^1.2.2"
+
+[tool.poetry.dev-dependencies]
+black = "*"
+flake8 = "*"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+
