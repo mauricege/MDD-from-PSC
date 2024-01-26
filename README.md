@@ -4,7 +4,7 @@ This repository contains the code for the machine learning experiments conducted
 ## Installation of dependencies
 First, clone the repository WITH the openXBOW submodule:
 ```
-git clone --recurse-submodules https://github.com/mauricege/MMD-from-PSC.git
+git clone --recurse-submodules https://github.com/mauricege/MDD-from-PSC.git
 ```
 
 ### With nix
