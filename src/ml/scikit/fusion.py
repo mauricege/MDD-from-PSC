@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+import warnings
+warnings.filterwarnings("ignore")
 import os
 
 import dvc.api
@@ -12,11 +14,12 @@ from sklearn.metrics import (
     make_scorer,
     precision_score,
     recall_score,
+    fbeta_score,
 )
 from sklearn.svm import LinearSVC
 from xgboost import XGBClassifier
 
-from .base import run
+from .base import run, classification_metrics
 from sklearn.pipeline import Pipeline
 from sklearn import set_config
 from sklearn.compose import ColumnTransformer
@@ -24,6 +27,7 @@ from sklearn.ensemble import StackingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import KNNImputer
 from catboost import CatBoostClassifier
+
 
 set_config(transform_output="pandas")
 
@@ -38,7 +42,9 @@ GRID = {
                     (
                         "model",
                         LinearSVC(
-                            random_state=RANDOM_SEED, dual=True, class_weight="balanced"
+                            random_state=RANDOM_SEED,
+                            dual="auto",
+                            class_weight="balanced",
                         ),
                     ),
                 ]
@@ -52,8 +58,10 @@ GRID = {
     },
     "xgb": {
         "estimator": [
+            # XGBClassifier(random_state=RANDOM_SEED)
             XGBClassifier(random_state=RANDOM_SEED)
         ],
+        # "estimator__learning_rate": [0.3, 0.1, 0.01, 0.001]
     },
     "catboost": {
         "estimator": [
@@ -102,25 +110,24 @@ def pipeline_and_grid(key, column_ensemble=None):
             grid[
                 key.replace("estimator", f"stacking_classifier__estimator_{i}__model")
             ] = _grid[key]
-    steps.append(("stacking_classifier", StackingClassifier(estimators)))
+    steps.append(
+        (
+            "stacking_classifier",
+            StackingClassifier(
+                estimators,
+                final_estimator=LinearSVC(dual="auto", class_weight="balanced"),
+            ),
+        )
+    )
+    grid["stacking_classifier__final_estimator__C"] = np.logspace(0, -6, num=7)
+    grid["stacking_classifier__final_estimator__class_weight"] = [
+        "balanced",
+        {1: 2, 0: 1},
+        {1: 3, 0: 1},
+        {1: 4, 0: 1},
+    ]
     pipeline = Pipeline(steps)
     return pipeline, grid
-
-
-def classification_metrics(y_true, y_pred, probabilities=None):
-    acc = accuracy_score(y_true, y_pred)
-    uar = recall_score(y_true, y_pred, average="macro")
-    f1 = f1_score(y_true, y_pred, average="macro")
-    prec = precision_score(y_true, y_pred, average="macro")
-    cm = confusion_matrix(y_true, y_pred)
-    metrics = {
-        "acc": float(acc),
-        "uar": float(uar),
-        "f1": float(f1),
-        "prec": float(prec),
-        "cm": cm.tolist(),
-    }
-    return metrics
 
 
 if __name__ == "__main__":
@@ -133,6 +140,7 @@ if __name__ == "__main__":
     metrics_folder = "./metrics/fusion"
     os.makedirs(result_folder, exist_ok=True)
     os.makedirs(metrics_folder, exist_ok=True)
+    scoring = make_scorer(fbeta_score, beta=1)
 
     run(
         feature_folder,
@@ -143,7 +151,7 @@ if __name__ == "__main__":
         metadata_file=label_file,
         grid=GRID,
         model_key=params["train"]["fusion"]["estimator"],
-        scoring=make_scorer(accuracy_score),
+        scoring=scoring,
         metrics_fn=classification_metrics,
         group_regex=params["dataset"]["group_regex"],
         target_label=params["train"]["experiment"]["target_label"],

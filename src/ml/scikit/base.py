@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+import warnings
+warnings.filterwarnings("ignore")
 import csv
 import json
 import os
@@ -16,10 +18,41 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.impute import KNNImputer
 from sklearn.ensemble import StackingClassifier
-from sklearn.metrics import RocCurveDisplay
+from sklearn.metrics import RocCurveDisplay, PrecisionRecallDisplay
 from glob import glob
-
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    make_scorer,
+    precision_score,
+    recall_score,
+    fbeta_score,
+    precision_recall_fscore_support,
+)
 from src.utils import add_groups_to_dataframe
+from sklearn.svm import LinearSVC
+
+
+def classification_metrics(y_true, y_pred, probabilities=None):
+    acc = accuracy_score(y_true, y_pred)
+    uar = recall_score(y_true, y_pred, average="macro")
+    f1 = f1_score(y_true, y_pred, average="macro")
+    prec = precision_score(y_true, y_pred, average="macro")
+    cm = confusion_matrix(y_true, y_pred)
+    _, (specificity, sensitivity), _, _ = precision_recall_fscore_support(
+        y_true, y_pred, average=None
+    )
+    metrics = {
+        "acc": float(acc),
+        "balanced_accuracy": float(uar),
+        "f1": float(f1),
+        "prec": float(prec),
+        "cm": cm.tolist(),
+        "specificity": float(specificity),
+        "sensitivity": float(sensitivity),
+    }
+    return metrics
 
 
 def get_pipeline_and_grid(key, GRID, scorer, aggregate_re=None, column_ensemble=None):
@@ -32,6 +65,7 @@ def get_pipeline_and_grid(key, GRID, scorer, aggregate_re=None, column_ensemble=
         verbose_feature_names_out=False,
     )
     steps.append(("column_selector", selector))
+    # steps.append(("imputer", KNNImputer()))
     steps.append(("scaler", StandardScaler()))
     grid = {}
     estimators = []
@@ -62,7 +96,17 @@ def get_pipeline_and_grid(key, GRID, scorer, aggregate_re=None, column_ensemble=
                     )
                 ] = _grid[key]
 
-        steps.append(("stacking_classifier", StackingClassifier(estimators)))
+        # steps.append(("stacking_classifier", StackingClassifier(estimators)))
+        steps.append(
+            (
+                "stacking_classifier",
+                StackingClassifier(
+                    estimators,
+                    final_estimator=LinearSVC(dual="auto", class_weight="balanced"),
+                ),
+            )
+        )
+        grid["stacking_classifier__final_estimator__C"] = np.logspace(0, -6, num=7)
     else:
         steps.append(("estimator", estimator))
         grid = _grid
@@ -241,15 +285,18 @@ def run(
         column_ensemble=[feature_names[1 : -len(metadata_columns)], metadata_columns]
         if len(metadata_columns) > 0
         else None,
+        # column_ensemble=None,
     )
 
     clf = GridSearchCV(
         estimator=pipeline,
         param_grid=grid,
+        scoring=scoring,
         n_jobs=int(os.environ.get("SLURM_CPUS_PER_TASK", default=-1)),
         cv=5,
         refit=True,
         verbose=1,
+        # return_train_score=True,
     )
 
     metrics = []
@@ -296,6 +343,21 @@ def run(
                 [f"proba_{class_name}" for class_name in class_names]
             ] = pred_proba
 
+        PrecisionRecallDisplay.from_estimator(
+            clf.best_estimator_,
+            X.iloc[test_indices],
+            y_test,
+            drop_intermediate=True,
+            response_method="predict_proba"
+            if pred_proba is not None
+            else "decision_function",
+            name=type(clf.best_estimator_._final_estimator).__name__,
+            plot_chance_level=True,
+        )
+        plt.show()
+        plt.savefig(os.path.join(fold_dir, "pr_curve.pdf"))
+        plt.savefig(os.path.join(fold_dir, "pr_curve.png"))
+
         RocCurveDisplay.from_estimator(
             clf.best_estimator_,
             X.iloc[test_indices],
@@ -308,6 +370,8 @@ def run(
         )
         plt.show()
         plt.savefig(os.path.join(fold_dir, "roc_curve.pdf"))
+        plt.savefig(os.path.join(fold_dir, "roc_curve.png"))
+
         svm_params = make_dict_json_serializable(clf.best_params_)
         prediction_dfs.append(prediction_df)
         fold_metrics = metrics_fn(y_test, preds, probabilities=pred_proba)

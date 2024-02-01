@@ -12,11 +12,13 @@ from sklearn.metrics import (
     make_scorer,
     precision_score,
     recall_score,
+    fbeta_score,
+    precision_recall_fscore_support,
 )
 from sklearn.svm import LinearSVC
 from xgboost import XGBClassifier
 
-from .base import get_pipeline_and_grid, run
+from .base import get_pipeline_and_grid, run, classification_metrics
 from catboost import CatBoostClassifier
 
 RANDOM_SEED = 42
@@ -24,10 +26,19 @@ RANDOM_SEED = 42
 GRID = {
     "svm": {
         "estimator": [
-            LinearSVC(random_state=RANDOM_SEED, dual=True, class_weight="balanced")
+            LinearSVC(random_state=RANDOM_SEED, dual="auto", class_weight="balanced")
         ],
         "estimator__C": np.logspace(0, -6, num=7),
         "estimator__max_iter": [20000],
+        "estimator__class_weight": [
+            "balanced",
+            {1: 1.5, 0: 1},
+            {1: 2, 0: 1},
+            {1: 2.5, 0: 1},
+            {1: 3, 0: 1},
+            {1: 4, 0: 1},
+            {1: 5, 0: 1},
+        ],
     },
     "GradientBoostingRegressor": {
         "estimator": [GradientBoostingClassifier(random_state=RANDOM_SEED)],
@@ -51,20 +62,7 @@ GRID = {
 }
 
 
-def classification_metrics(y_true, y_pred, probabilities=None):
-    acc = accuracy_score(y_true, y_pred)
-    uar = recall_score(y_true, y_pred, average="macro")
-    f1 = f1_score(y_true, y_pred, average="macro")
-    prec = precision_score(y_true, y_pred, average="macro")
-    cm = confusion_matrix(y_true, y_pred)
-    metrics = {
-        "acc": float(acc),
-        "uar": float(uar),
-        "f1": float(f1),
-        "prec": float(prec),
-        "cm": cm.tolist(),
-    }
-    return metrics
+
 
 
 if __name__ == "__main__":
@@ -77,7 +75,8 @@ if __name__ == "__main__":
     metrics_folder = "./metrics/audio"
     os.makedirs(result_folder, exist_ok=True)
     os.makedirs(metrics_folder, exist_ok=True)
-   
+    scoring = make_scorer(fbeta_score, beta=1)
+
     run(
         feature_folder,
         label_file,
@@ -87,7 +86,7 @@ if __name__ == "__main__":
         grid=GRID,
         # pipeline=pipeline,
         model_key=params["train"]["audio"]["estimator"],
-        scoring=make_scorer(accuracy_score),
+        scoring=scoring,
         metrics_fn=classification_metrics,
         group_regex=params["dataset"]["group_regex"],
         target_label=params["train"]["experiment"]["target_label"],
